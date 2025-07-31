@@ -114,56 +114,83 @@ async function loadQuestions() {
 }
 
 function showQuestion() {
-    if (currentQuestionIndex >= questions.length) {
-        document.getElementById('exam-screen').style.display = "none";
-        document.getElementById('finish-screen').style.display = "block";
-        return;
+  if (currentQuestionIndex >= questions.length) {
+    document.getElementById('exam-screen').style.display = "none";
+    document.getElementById('finish-screen').style.display = "block";
+    return;
+  }
+  let q = questions[currentQuestionIndex];
+  document.getElementById('question-text').innerText = q.text;
+  document.getElementById('answer').value = "";
+
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.style.display = "inline-block";
+  submitBtn.disabled = false;
+
+  startTime = new Date();
+  let totalSeconds = q.time * 60; // 5 دقائق
+  let minWaitSeconds = 180; // 3 دقائق
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    totalSeconds--;
+    let minutes = Math.floor(totalSeconds / 60);
+    let seconds = totalSeconds % 60;
+    document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    if (totalSeconds <= 0) {
+      clearInterval(timerInterval);
+      // الوقت انتهى وإذا لم يضغط الطالب، نحفظ الإجابة تلقائياً
+      autoSubmitAnswer();
     }
-    let q = questions[currentQuestionIndex];
-    document.getElementById('question-text').innerText = q.text;
-    document.getElementById('answer').value = "";
-    document.getElementById('submit-btn').disabled = true;
-
-    startTime = new Date();
-    let totalSeconds = q.time * 60; // 5 دقائق
-    let canSubmitAfter = 18; // 3 دقائق = 180 ثانية
-
-    clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-        totalSeconds--;
-        let minutes = Math.floor(totalSeconds / 6);
-        let seconds = totalSeconds % 6;
-        document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-
-        if (totalSeconds <= q.time * 6 - canSubmitAfter) {
-            document.getElementById('submit-btn').disabled = false;
-        }
-
-        if (totalSeconds <= 0) {
-            clearInterval(timerInterval);
-            submitAnswer();
-        }
-    }, 1000);
+  }, 1000);
 }
 
 async function submitAnswer() {
-    submitTime = new Date();
-    let answerText = document.getElementById('answer').value.trim();
-    let q = questions[currentQuestionIndex];
+  submitTime = new Date();
+  let elapsedSeconds = (submitTime - startTime) / 1000;
 
-    await fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify({
-            action: "saveAnswer",
-            studentName: studentName,
-            college: college,
-            questionId: q.id,
-            questionText: q.text,
-            answerText: answerText,
-            startTime: startTime.toLocaleString(),
-            submitTime: submitTime.toLocaleString()
-        })
+  if (elapsedSeconds < 180) {
+    alert(`لا يمكنك الانتقال للسؤال التالي قبل مرور 3 دقائق. الرجاء الانتظار ${Math.ceil(180 - elapsedSeconds)} ثانية.`);
+    return;
+  }
+
+  let answerText = document.getElementById('answer').value.trim();
+  let q = questions[currentQuestionIndex];
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
+
+  clearInterval(timerInterval); // إيقاف المؤقت عند الإرسال
+
+  try {
+    let res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "saveAnswer",
+        studentName: studentName,
+        college: college,
+        questionId: q.id,
+        questionText: q.text,
+        answerText: answerText,
+        startTime: startTime.toLocaleString(),
+        submitTime: submitTime.toLocaleString()
+      })
     });
+    let result = await res.json();
+
+    if (result.status === "Saved") {
+      currentQuestionIndex++;
+      showQuestion();
+    } else {
+      alert("حدث خطأ أثناء حفظ الإجابة، حاول مجدداً.");
+      submitBtn.disabled = false;
+    }
+  } catch (err) {
+    alert("خطأ في الاتصال، تأكد من الإنترنت وحاول مرة أخرى.");
+    submitBtn.disabled = false;
+  }
+}
+
 
     currentQuestionIndex++;
     showQuestion();
