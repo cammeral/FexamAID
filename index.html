@@ -83,143 +83,144 @@
 </div>
 
 <script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbwLZtUe4aXC9fuaHBuxw5PdE5OnYfzfnBqAUrbdJ_WV8qgbH7psE1J7N7S95I3j4w3evQ/exec" Google Apps Script الخاص بك
-  let questions = [];
-  let currentQuestionIndex = 0;
-  let timerInterval;
-  let startTime, submitTime;
-  let studentName = "", college = "";
+const API_URL = "https://script.google.com/macros/s/AKfycbwLZtUe4aXC9fuaHBuxw5PdE5OnYfzfnBqAUrbdJ_WV8qgbH7psE1J7N7S95I3j4w3evQ/exec"; // Google Apps Script الخاص بك
+let questions = [];
+let currentQuestionIndex = 0;
+let timerInterval;
+let startTime, submitTime;
+let studentName = "", college = "";
 
-  function showIntro() {
-    studentName = document.getElementById('studentName').value.trim();
-    college = document.getElementById('college').value.trim();
-    if (!studentName || !college) {
-      alert("الرجاء إدخال اسمك والكلية");
-      return;
+function showIntro() {
+  studentName = document.getElementById('studentName').value.trim();
+  college = document.getElementById('college').value.trim();
+  if (!studentName || !college) {
+    alert("الرجاء إدخال اسمك والكلية");
+    return;
+  }
+  document.getElementById('start-screen').style.display = "none";
+  document.getElementById('intro-screen').style.display = "block";
+}
+
+async function startExam() {
+  document.getElementById('intro-screen').style.display = "none";
+  document.getElementById('exam-screen').style.display = "block";
+  await loadQuestions();
+  showQuestion();
+}
+
+async function loadQuestions() {
+  try {
+    let res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({action: "getQuestions"})
+    });
+    questions = await res.json();
+  } catch (err) {
+    alert("حدث خطأ أثناء جلب الأسئلة. تأكد من رابط API والاتصال بالإنترنت.");
+  }
+}
+
+function showQuestion() {
+  if (currentQuestionIndex >= questions.length) {
+    document.getElementById('exam-screen').style.display = "none";
+    document.getElementById('finish-screen').style.display = "block";
+    return;
+  }
+  let q = questions[currentQuestionIndex];
+  document.getElementById('question-text').innerText = q.text;
+  document.getElementById('answer').value = "";
+
+  startTime = new Date();
+  let totalSeconds = q.time * 60; // 5 دقائق
+  let minWaitSeconds = 180; // 3 دقائق
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    totalSeconds--;
+    let minutes = Math.floor(totalSeconds / 60);
+    let seconds = totalSeconds % 60;
+    document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+    if (totalSeconds <= 0) {
+      clearInterval(timerInterval);
+      // عند انتهاء الوقت إذا لم يضغط الطالب زر الإرسال، تحفظ الإجابة تلقائياً
+      autoSubmitAnswer();
     }
-    document.getElementById('start-screen').style.display = "none";
-    document.getElementById('intro-screen').style.display = "block";
+  }, 1000);
+}
+
+async function submitAnswer() {
+  submitTime = new Date();
+  let elapsedSeconds = (submitTime - startTime) / 1000;
+
+  if (elapsedSeconds < 180) {
+    alert(`لا يمكنك الانتقال للسؤال التالي قبل مرور 3 دقائق. الرجاء الانتظار ${Math.ceil(180 - elapsedSeconds)} ثانية.`);
+    return;
   }
 
-  async function startExam() {
-    document.getElementById('intro-screen').style.display = "none";
-    document.getElementById('exam-screen').style.display = "block";
-    await loadQuestions();
-    showQuestion();
-  }
+  let answerText = document.getElementById('answer').value.trim();
+  let q = questions[currentQuestionIndex];
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
 
-  async function loadQuestions() {
-    try {
-      let res = await fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify({action: "getQuestions"})
-      });
-      questions = await res.json();
-    } catch (err) {
-      alert("حدث خطأ أثناء جلب الأسئلة. تأكد من رابط API والاتصال بالإنترنت.");
-    }
-  }
+  clearInterval(timerInterval); // إيقاف المؤقت عند الإرسال
 
-  function showQuestion() {
-    if (currentQuestionIndex >= questions.length) {
-      document.getElementById('exam-screen').style.display = "none";
-      document.getElementById('finish-screen').style.display = "block";
-      return;
-    }
-    let q = questions[currentQuestionIndex];
-    document.getElementById('question-text').innerText = q.text;
-    document.getElementById('answer').value = "";
+  try {
+    let res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "saveAnswer",
+        studentName: studentName,
+        college: college,
+        questionId: q.id,
+        questionText: q.text,
+        answerText: answerText,
+        startTime: startTime.toLocaleString(),
+        submitTime: submitTime.toLocaleString()
+      })
+    });
+    let result = await res.json();
 
-    startTime = new Date();
-    let totalSeconds = q.time * 60; // 5 دقائق
-    let minWaitSeconds = 180; // 3 دقائق
-
-    clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-      totalSeconds--;
-      let minutes = Math.floor(totalSeconds / 60);
-      let seconds = totalSeconds % 60;
-      document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-
-      if (totalSeconds <= 0) {
-        clearInterval(timerInterval);
-        // عند انتهاء الوقت إذا لم يضغط الطالب زر الإرسال، تحفظ الإجابة تلقائياً
-        autoSubmitAnswer();
-      }
-    }, 1000);
-  }
-
-  async function submitAnswer() {
-    submitTime = new Date();
-    let elapsedSeconds = (submitTime - startTime) / 1000;
-
-    if (elapsedSeconds < 180) {
-      alert(`لا يمكنك الانتقال للسؤال التالي قبل مرور 3 دقائق. الرجاء الانتظار ${Math.ceil(180 - elapsedSeconds)} ثانية.`);
-      return;
-    }
-
-    let answerText = document.getElementById('answer').value.trim();
-    let q = questions[currentQuestionIndex];
-    const submitBtn = document.getElementById('submit-btn');
-    submitBtn.disabled = true;
-
-    clearInterval(timerInterval); // إيقاف المؤقت عند الإرسال
-
-    try {
-      let res = await fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify({
-          action: "saveAnswer",
-          studentName: studentName,
-          college: college,
-          questionId: q.id,
-          questionText: q.text,
-          answerText: answerText,
-          startTime: startTime.toLocaleString(),
-          submitTime: submitTime.toLocaleString()
-        })
-      });
-      let result = await res.json();
-
-      if (result.status === "Saved") {
-        currentQuestionIndex++;
-        showQuestion();
-      } else {
-        alert("حدث خطأ أثناء حفظ الإجابة، حاول مجدداً.");
-        submitBtn.disabled = false;
-      }
-    } catch (err) {
-      alert("خطأ في الاتصال، تأكد من الإنترنت وحاول مرة أخرى.");
-      submitBtn.disabled = false;
-    }
-  }
-
-  async function autoSubmitAnswer() {
-    submitTime = new Date();
-    let answerText = document.getElementById('answer').value.trim();
-    let q = questions[currentQuestionIndex];
-
-    try {
-      await fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify({
-          action: "saveAnswer",
-          studentName: studentName,
-          college: college,
-          questionId: q.id,
-          questionText: q.text,
-          answerText: answerText,
-          startTime: startTime.toLocaleString(),
-          submitTime: submitTime.toLocaleString()
-        })
-      });
-    } catch (err) {
-      // يمكن تضيف هنا معالجة الأخطاء إذا تحب
-    } finally {
+    if (result.status === "Saved") {
       currentQuestionIndex++;
       showQuestion();
+    } else {
+      alert("حدث خطأ أثناء حفظ الإجابة، حاول مجدداً.");
+      submitBtn.disabled = false;
     }
+  } catch (err) {
+    alert("خطأ في الاتصال، تأكد من الإنترنت وحاول مرة أخرى.");
+    submitBtn.disabled = false;
   }
+}
+
+async function autoSubmitAnswer() {
+  submitTime = new Date();
+  let answerText = document.getElementById('answer').value.trim();
+  let q = questions[currentQuestionIndex];
+
+  try {
+    await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "saveAnswer",
+        studentName: studentName,
+        college: college,
+        questionId: q.id,
+        questionText: q.text,
+        answerText: answerText,
+        startTime: startTime.toLocaleString(),
+        submitTime: submitTime.toLocaleString()
+      })
+    });
+  } catch (err) {
+    // يمكنك إضافة معالجة أخطاء إذا تريد
+  } finally {
+    currentQuestionIndex++;
+    showQuestion();
+  }
+}
+
 </script>
 
 </body>
