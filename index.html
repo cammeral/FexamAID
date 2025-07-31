@@ -131,11 +131,11 @@ function showQuestion() {
     clearInterval(timerInterval);
     timerInterval = setInterval(() => {
         totalSeconds--;
-        let minutes = Math.floor(totalSeconds / 60);
-        let seconds = totalSeconds % 60;
+        let minutes = Math.floor(totalSeconds / 6);
+        let seconds = totalSeconds % 6;
         document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-        if (totalSeconds <= q.time * 60 - canSubmitAfter) {
+        if (totalSeconds <= q.time * 6 - canSubmitAfter) {
             document.getElementById('submit-btn').disabled = false;
         }
 
