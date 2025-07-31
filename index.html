@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>الامتحان النهائي</title>
+<style>
+    body {
+        font-family: Tahoma, sans-serif;
+        background: #f4f6f8;
+        color: #333;
+        text-align: center;
+        padding: 20px;
+    }
+    .box {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        max-width: 600px;
+        margin: auto;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    input, textarea, button {
+        width: 90%;
+        padding: 10px;
+        margin: 8px 0;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        font-size: 16px;
+    }
+    button {
+        background: #28a745;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    button:disabled {
+        background: #999;
+        cursor: not-allowed;
+    }
+    #timer {
+        font-size: 20px;
+        font-weight: bold;
+        margin: 10px 0;
+        color: #e53935;
+    }
+</style>
+</head>
+<body>
+
+<div id="start-screen" class="box">
+    <h2>أدخل بياناتك لبدء الامتحان</h2>
+    <input type="text" id="studentName" placeholder="اسمك" required>
+    <input type="text" id="college" placeholder="الكلية" required>
+    <button onclick="showIntro()">التالي</button>
+</div>
+
+<div id="intro-screen" class="box" style="display:none;">
+    <h2>مرحباً بك في الامتحان النهائي</h2>
+    <p>👋 نتمنى لك التوفيق والنجاح</p>
+    <p>📌 تعليمات:</p>
+    <ul style="text-align:right;">
+        <li>لكل سؤال 5 دقائق</li>
+        <li>لا يمكنك الانتقال للسؤال التالي حتى مرور 3 دقائق على الأقل</li>
+        <li>الإجابات تُحفظ تلقائياً</li>
+    </ul>
+    <button onclick="startExam()">ابدأ الامتحان</button>
+</div>
+
+<div id="exam-screen" class="box" style="display:none;">
+    <h3 id="question-text"></h3>
+    <div id="timer"></div>
+    <textarea id="answer" rows="6" placeholder="اكتب إجابتك هنا..."></textarea>
+    <br>
+    <button id="submit-btn" onclick="submitAnswer()" disabled>إرسال الإجابة</button>
+</div>
+
+<div id="finish-screen" class="box" style="display:none;">
+    <h2>✅ تم إكمال الامتحان</h2>
+    <p>شكرًا لمشاركتك</p>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbyM89Yn2JJ1lNLk-HxEIndhdEeh4Me9fTNLlSUMJs40H_6gjsVDAuesrvTH_GeCYbVKOg/exec"; // 🔴 عدله برابط Google Apps Script
+let questions = [];
+let currentQuestionIndex = 0;
+let timerInterval;
+let startTime, submitTime;
+let studentName = "", college = "";
+
+function showIntro() {
+    studentName = document.getElementById('studentName').value.trim();
+    college = document.getElementById('college').value.trim();
+    if (!studentName || !college) {
+        alert("الرجاء إدخال اسمك والكلية");
+        return;
+    }
+    document.getElementById('start-screen').style.display = "none";
+    document.getElementById('intro-screen').style.display = "block";
+}
+
+async function startExam() {
+    document.getElementById('intro-screen').style.display = "none";
+    document.getElementById('exam-screen').style.display = "block";
+    await loadQuestions();
+    showQuestion();
+}
+
+async function loadQuestions() {
+    let res = await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({action: "getQuestions"})
+    });
+    questions = await res.json();
+}
+
+function showQuestion() {
+    if (currentQuestionIndex >= questions.length) {
+        document.getElementById('exam-screen').style.display = "none";
+        document.getElementById('finish-screen').style.display = "block";
+        return;
+    }
+    let q = questions[currentQuestionIndex];
+    document.getElementById('question-text').innerText = q.text;
+    document.getElementById('answer').value = "";
+    document.getElementById('submit-btn').disabled = true;
+
+    startTime = new Date();
+    let totalSeconds = q.time * 60; // 5 دقائق
+    let canSubmitAfter = 180; // 3 دقائق = 180 ثانية
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        totalSeconds--;
+        let minutes = Math.floor(totalSeconds / 60);
+        let seconds = totalSeconds % 60;
+        document.getElementById('timer').innerText = `الوقت المتبقي: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        if (totalSeconds <= q.time * 60 - canSubmitAfter) {
+            document.getElementById('submit-btn').disabled = false;
+        }
+
+        if (totalSeconds <= 0) {
+            clearInterval(timerInterval);
+            submitAnswer();
+        }
+    }, 1000);
+}
+
+async function submitAnswer() {
+    submitTime = new Date();
+    let answerText = document.getElementById('answer').value.trim();
+    let q = questions[currentQuestionIndex];
+
+    await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({
+            action: "saveAnswer",
+            studentName: studentName,
+            college: college,
+            questionId: q.id,
+            questionText: q.text,
+            answerText: answerText,
+            startTime: startTime.toLocaleString(),
+            submitTime: submitTime.toLocaleString()
+        })
+    });
+
+    currentQuestionIndex++;
+    showQuestion();
+}
+</script>
+</body>
+</html>
